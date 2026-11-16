@@ -1,8 +1,88 @@
-"""Aplicación FastAPI del servicio de pronóstico de NovaMercado.
+"""Aplicación FastAPI del servicio de pronóstico de NovaMercado (contrato del Anexo)."""
 
-Los endpoints del contrato (Anexo del laboratorio) se agregan en los siguientes PRs.
-"""
+from __future__ import annotations
 
-from fastapi import FastAPI
+import logging
+import os
+from contextlib import asynccontextmanager
+from typing import Any
 
-app = FastAPI(title="NovaMercado - Pronóstico diario de ventas")
+from fastapi import Body, FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from sqlalchemy import create_engine
+
+from novamercado.api.gestor_modelo import gestor_mlflow
+from novamercado.api.servicio import Resultado, Servicio
+from novamercado.catalogo import cargar_catalogo
+from novamercado.db import repositorio
+from novamercado.esquemas import InfoModelo
+from novamercado.modelo import datos as datos_mod
+
+log = logging.getLogger(__name__)
+
+
+def servicio_desde_entorno() -> Servicio:
+    """Arma el servicio con la configuración de las variables de entorno."""
+    datos_dir = os.environ.get("DATOS_DIR", "/datos")
+    engine = create_engine(os.environ["NOVA_DB_URL"], pool_pre_ping=True)
+    repositorio.crear_tablas(engine)
+    repositorio.cargar_historico_si_vacio(engine, datos_dir)
+
+    gestor = gestor_mlflow()
+    try:
+        gestor.actualizar()
+    except Exception:  # MLflow no disponible: se reintenta más tarde
+        log.exception("No se pudo consultar el modelo vigente en MLflow")
+
+    return Servicio(
+        engine=engine,
+        catalogo=cargar_catalogo(datos_dir),
+        feriados=datos_mod.cargar_feriados(datos_dir),
+        tiendas=datos_mod.cargar_tiendas(datos_dir),
+        gestor=gestor,
+    )
+
+
+def _respuesta(r: Resultado) -> JSONResponse:
+    return JSONResponse(status_code=r.codigo, content=r.cuerpo)
+
+
+def crear_app(servicio: Servicio | None = None) -> FastAPI:
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        app.state.servicio = servicio or servicio_desde_entorno()
+        yield
+
+    app = FastAPI(title="NovaMercado - Pronóstico diario de ventas", lifespan=lifespan)
+
+    @app.exception_handler(RequestValidationError)
+    async def cuerpo_invalido(request: Request, exc: RequestValidationError):
+        # Cuerpo que no es JSON válido: se registra y se rechaza con detail en texto
+        crudo = (await request.body()).decode("utf-8", errors="replace")
+        tipo = "observaciones" if request.url.path.endswith("observaciones") else "prediccion"
+        r = request.app.state.servicio.rechazar_cuerpo_invalido(
+            tipo, crudo, "el cuerpo de la solicitud no es un JSON válido"
+        )
+        return _respuesta(r)
+
+    @app.post("/v1/prediccion")
+    def prediccion(request: Request, payload: Any = Body(None)):
+        return _respuesta(request.app.state.servicio.predecir(payload))
+
+    @app.post("/v1/observaciones")
+    def observaciones(request: Request, payload: Any = Body(None)):
+        return _respuesta(request.app.state.servicio.observar(payload))
+
+    @app.get("/modelo", response_model=InfoModelo)
+    def modelo(request: Request):
+        cargado = request.app.state.servicio.gestor.actual
+        if cargado is None:
+            return JSONResponse(status_code=503, content={"detail": "no hay un modelo cargado todavía"})
+        return InfoModelo(nombre=cargado.nombre, alias=cargado.alias, version=cargado.version)
+
+    return app
+
+
+logging.basicConfig(level=logging.INFO)
+app = crear_app()

@@ -21,7 +21,8 @@ docker-compose.yml     # API, db (producto), airflow-db, mlflow, airflow-*
 docker/api/            # Imagen de la API y sus dependencias fijadas
 docker/airflow/        # Imagen de Airflow (incluye los DAGs)
 novamercado/           # Código Python del producto
-  api/                 # Aplicación FastAPI (endpoints delgados)
+  api/                 # FastAPI: main.py (endpoints delgados), servicio.py, gestor_modelo.py
+  db/                  # Tablas (SQLAlchemy Core) y repositorio de la BD del producto
   esquemas.py          # Modelos Pydantic del contrato (solicitudes limpias y respuestas)
   catalogo.py          # Carga de tiendas, familias y feriados publicados
   limpieza/            # Política reparar / advertir / rechazar (sin dependencias de FastAPI)
@@ -70,6 +71,13 @@ Pydantic + `RegistroCalidad`. `SolicitudRechazada` se traduce a 422 con `detail`
 Regla general: problemas a nivel de solicitud (cuerpo, tienda, fecha, lista) ⇒ rechazar;
 problemas de un elemento ⇒ descartarlo/suponer con `advertir`; correcciones inequívocas ⇒ `reparar`.
 Toda regla nueva debe ser general (no atada a un ejemplo del catálogo) y llevar prueba.
+
+## Persistencia
+
+Tablas: `historico_ventas` (cargado una vez si está vacía), `solicitudes` (todas, incluidas
+rechazadas, con el cuerpo crudo), `correcciones`, `predicciones` (con `version_modelo`) y
+`observaciones` (PK tienda+fecha+familia; solo se insertan filas nuevas o con ventas distintas).
+El código de BD debe funcionar en SQLAlchemy 1.4 (versión de Airflow) y en SQLite (pruebas).
 
 ## Modelado
 
