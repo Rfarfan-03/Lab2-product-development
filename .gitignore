@@ -1,0 +1,24 @@
+# Datos publicados (no forman parte del repositorio)
+datos_lab2/
+
+# Enunciado del laboratorio
+*.pdf
+
+# Credenciales
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Airflow (logs locales)
+logs/
+
+# Editor / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
