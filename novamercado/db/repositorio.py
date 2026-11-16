@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from sqlalchemy import and_, func, insert, select, update
+from sqlalchemy import and_, func, insert, select, text, update
 from sqlalchemy.engine import Connection, Engine
 
 from novamercado.db.esquema import (
@@ -27,6 +27,28 @@ log = logging.getLogger(__name__)
 
 def crear_tablas(engine: Engine) -> None:
     metadata.create_all(engine)
+
+
+_LLAVE_BLOQUEO_PREPARACION = 7_460_002  # advisory lock de PostgreSQL
+
+
+def preparar_bd(engine: Engine, datos_dir: str | Path) -> None:
+    """Crea las tablas y carga el histórico si hace falta.
+
+    La API y el servicio de arranque pueden llamarla al mismo tiempo: en PostgreSQL se
+    serializa con un advisory lock para que no compitan creando tablas o cargando datos.
+    """
+    if engine.dialect.name != "postgresql":
+        crear_tablas(engine)
+        cargar_historico_si_vacio(engine, datos_dir)
+        return
+    with engine.connect() as con:
+        con.execute(text("SELECT pg_advisory_lock(:k)"), {"k": _LLAVE_BLOQUEO_PREPARACION})
+        try:
+            crear_tablas(engine)
+            cargar_historico_si_vacio(engine, datos_dir)
+        finally:
+            con.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": _LLAVE_BLOQUEO_PREPARACION})
 
 
 def cargar_historico_si_vacio(engine: Engine, datos_dir: str | Path) -> int:
@@ -232,7 +254,13 @@ def ventas_para_entrenar(con: Connection) -> pd.DataFrame:
         columns=["fecha", "tienda_id", "familia_id", "en_promocion"],
     )
     obs = obs.merge(promos, on=["fecha", "tienda_id", "familia_id"], how="left")
-    df = pd.concat([hist, obs], ignore_index=True)
+    partes = [p for p in (hist, obs) if not p.empty]  # un DataFrame vacío dejaría columnas object
+    if not partes:
+        return pd.DataFrame(columns=["fecha", "tienda_id", "familia_id", "ventas", "en_promocion"])
+    df = pd.concat(partes, ignore_index=True)
     df["fecha"] = pd.to_datetime(df["fecha"])
+    df["tienda_id"] = df["tienda_id"].astype(int)
+    df["ventas"] = pd.to_numeric(df["ventas"], errors="coerce").astype(float)
+    df["en_promocion"] = pd.to_numeric(df["en_promocion"], errors="coerce").astype(float)
     df = df.drop_duplicates(["fecha", "tienda_id", "familia_id"], keep="last")
     return df.sort_values(["fecha", "tienda_id", "familia_id"]).reset_index(drop=True)
