@@ -17,6 +17,7 @@ from novamercado.api.admin import AdminReentrenamiento
 from novamercado.api.airflow_cliente import ClienteAirflow
 from novamercado.api.gestor_modelo import gestor_mlflow
 from novamercado.api.monitor import MonitorModelo
+from novamercado.api.salud import VerificadorSalud, verificar_airflow, verificar_bd, verificar_mlflow
 from novamercado.api.servicio import Resultado, Servicio
 from novamercado.catalogo import cargar_catalogo
 from novamercado.db import repositorio
@@ -30,6 +31,7 @@ log = logging.getLogger(__name__)
 class Componentes:
     servicio: Servicio
     admin: AdminReentrenamiento
+    salud: VerificadorSalud
     monitor: MonitorModelo | None = None
 
 
@@ -37,8 +39,7 @@ def componentes_desde_entorno() -> Componentes:
     """Arma el servicio con la configuración de las variables de entorno."""
     datos_dir = os.environ.get("DATOS_DIR", "/datos")
     engine = create_engine(os.environ["NOVA_DB_URL"], pool_pre_ping=True)
-    repositorio.crear_tablas(engine)
-    repositorio.cargar_historico_si_vacio(engine, datos_dir)
+    repositorio.preparar_bd(engine, datos_dir)
 
     gestor = gestor_mlflow()
     monitor = MonitorModelo(gestor, intervalo=float(os.environ.get("MODELO_REFRESCO_SEG", "30")))
@@ -54,7 +55,15 @@ def componentes_desde_entorno() -> Componentes:
     airflow = ClienteAirflow(
         os.environ["AIRFLOW_URL"], os.environ["AIRFLOW_USER"], os.environ["AIRFLOW_PASSWORD"]
     )
-    return Componentes(servicio, AdminReentrenamiento(engine, airflow, gestor), monitor)
+    salud = VerificadorSalud(
+        gestor,
+        {
+            "base de datos": verificar_bd(engine),
+            "MLflow": verificar_mlflow(os.environ["MLFLOW_TRACKING_URI"]),
+            "Airflow": verificar_airflow(os.environ["AIRFLOW_URL"]),
+        },
+    )
+    return Componentes(servicio, AdminReentrenamiento(engine, airflow, gestor), salud, monitor)
 
 
 def _respuesta(r: Resultado) -> JSONResponse:
@@ -65,7 +74,7 @@ def crear_app(componentes: Componentes | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         c = componentes or componentes_desde_entorno()
-        app.state.servicio, app.state.admin = c.servicio, c.admin
+        app.state.servicio, app.state.admin, app.state.salud = c.servicio, c.admin, c.salud
         if c.monitor:
             c.monitor.iniciar()
         yield
@@ -99,6 +108,10 @@ def crear_app(componentes: Componentes | None = None) -> FastAPI:
     @app.get("/admin/reentrenar/{id_ejecucion}")
     def estado_reentrenamiento(request: Request, id_ejecucion: str):
         return _respuesta(request.app.state.admin.consultar(id_ejecucion))
+
+    @app.get("/health")
+    def health(request: Request):
+        return _respuesta(request.app.state.salud.estado())
 
     @app.get("/modelo", response_model=InfoModelo)
     def modelo(request: Request):

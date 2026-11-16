@@ -17,7 +17,7 @@ enunciado no pida. Ante una ambigüedad, preguntar en lugar de inventar.
 ## Estructura
 
 ```
-docker-compose.yml     # API, db (producto), airflow-db, mlflow, airflow-*
+docker-compose.yml     # API, bootstrap, db (producto), airflow-db, mlflow, airflow-*
 docker/api/            # Imagen de la API y sus dependencias fijadas
 docker/airflow/        # Imagen de Airflow (incluye los DAGs)
 novamercado/           # Código Python del producto
@@ -88,6 +88,15 @@ El código de BD debe funcionar en SQLAlchemy 1.4 (versión de Airflow) y en SQL
   candidato como versión nueva; el alias solo se mueve si `criterio.decidir_reemplazo` lo aprueba
   (costo estrictamente menor en la misma ventana de validación de 28 días).
 - Las versiones de pandas, numpy, lightgbm y mlflow-skinny deben coincidir entre la API y Airflow.
+
+## Arranque y salud
+
+- `bootstrap` (imagen de la API, `python -m novamercado.arranque`): crea tablas, carga el histórico
+  y entrena/registra el primer modelo solo si no hay alias `vigente`. En reinicios no repite nada.
+- `repositorio.preparar_bd` usa un advisory lock para que la API y el bootstrap no compitan.
+- `GET /health` revisa en vivo BD, MLflow y Airflow (timeouts de 3 s) y el modelo cargado:
+  `ok`, `degradado` + `motivo`, o 503 mientras no haya modelo.
+- La API usa `MLFLOW_HTTP_REQUEST_MAX_RETRIES=0` para no bloquearse si MLflow está caído.
 
 ## Reentrenamiento
 

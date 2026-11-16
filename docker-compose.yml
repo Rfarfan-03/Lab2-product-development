@@ -116,6 +116,27 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
+  # Arranque desde cero: carga el histórico y entrena/registra el primer modelo si no
+  # existe uno vigente. En los siguientes arranques detecta que ya existe y termina.
+  bootstrap:
+    build:
+      context: .
+      dockerfile: docker/api/Dockerfile
+    image: novamercado-api:local
+    command: ["python", "-m", "novamercado.arranque"]
+    environment:
+      NOVA_DB_URL: postgresql+psycopg2://${APP_DB_USER}:${APP_DB_PASSWORD}@db:5432/${APP_DB_NAME}
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      DATOS_DIR: /datos
+    volumes:
+      - ./datos_lab2:/datos:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      mlflow:
+        condition: service_healthy
+    restart: on-failure
+
   api:
     build:
       context: .
@@ -124,6 +145,9 @@ services:
     environment:
       NOVA_DB_URL: postgresql+psycopg2://${APP_DB_USER}:${APP_DB_PASSWORD}@db:5432/${APP_DB_NAME}
       MLFLOW_TRACKING_URI: http://mlflow:5000
+      # Si MLflow no responde, fallar rápido y seguir con el modelo en memoria
+      MLFLOW_HTTP_REQUEST_MAX_RETRIES: "0"
+      MLFLOW_HTTP_REQUEST_TIMEOUT: "10"
       AIRFLOW_URL: http://airflow-webserver:8080
       AIRFLOW_USER: ${AIRFLOW_ADMIN_USER}
       AIRFLOW_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD}

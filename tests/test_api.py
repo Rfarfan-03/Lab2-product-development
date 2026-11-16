@@ -16,6 +16,7 @@ from sqlalchemy.pool import StaticPool
 from novamercado.api.admin import AdminReentrenamiento
 from novamercado.api.gestor_modelo import GestorModelo, ModeloCargado
 from novamercado.api.main import Componentes, crear_app
+from novamercado.api.salud import VerificadorSalud
 from novamercado.api.servicio import Servicio
 from novamercado.db import repositorio
 from novamercado.db.esquema import correcciones, historico_ventas, observaciones, predicciones, solicitudes
@@ -104,7 +105,7 @@ def airflow():
 def armar_cliente(engine, catalogo, feriados_df, tiendas_df, gestor, airflow):
     servicio = Servicio(engine, catalogo, feriados_df, tiendas_df, gestor)
     admin = AdminReentrenamiento(engine, airflow, gestor)
-    return TestClient(crear_app(Componentes(servicio, admin)))
+    return TestClient(crear_app(Componentes(servicio, admin, VerificadorSalud(gestor, {}))))
 
 
 @pytest.fixture

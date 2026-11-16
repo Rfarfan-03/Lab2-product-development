@@ -74,6 +74,7 @@ def construir_features(
     obj["fecha"] = pd.to_datetime(obj["fecha"])
     hist = historia[["fecha", "tienda_id", "familia_id", "ventas"]].copy()
     hist["fecha"] = pd.to_datetime(hist["fecha"])
+    hist["ventas"] = pd.to_numeric(hist["ventas"], errors="coerce").astype(float)
 
     obj = obj.merge(_features_de_historia(hist, obj), on=["fecha", "tienda_id", "familia_id"], how="left")
 
