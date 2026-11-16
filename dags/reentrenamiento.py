@@ -65,13 +65,13 @@ def registrar_fallo(context):
     from novamercado.db import repositorio
     from novamercado.modelo.registro import version_vigente
 
-    try:
-        vigente = version_vigente()
-        version = str(vigente.version) if vigente else None
-    except Exception:
-        version = None
     error = context.get("exception")
     with _engine().begin() as con:
+        try:
+            vigente = version_vigente()
+            version = str(vigente.version) if vigente else None
+        except Exception:  # MLflow no responde: última versión vigente registrada
+            version = repositorio.ultima_version_vigente_registrada(con)
         repositorio.finalizar_reentrenamiento(
             con,
             context["dag_run"].run_id,

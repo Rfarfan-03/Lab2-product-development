@@ -29,6 +29,7 @@ novamercado/           # Código Python del producto
   modelo/              # Features, baseline, LightGBM, métricas, criterio, entrenamiento/MLflow
 dags/                  # DAGs de Airflow
 tests/                 # Pruebas con pytest
+evidencia/             # Evidencia de funcionamiento (respuestas, MLflow, Airflow, operación)
 datos_lab2/            # Archivos publicados por el equipo docente (NO versionados)
 ```
 
@@ -110,6 +111,12 @@ El código de BD debe funcionar en SQLAlchemy 1.4 (versión de Airflow) y en SQL
   versión nueva sin reiniciar; si MLflow no responde, conserva el modelo en memoria.
 
 UIs locales: API http://localhost:8000/docs · MLflow http://localhost:5000 · Airflow http://localhost:8080
+
+## Documentación
+
+`README.md` (cómo levantar el producto) y `DECISIONES.md` (políticas y justificación) deben
+mantenerse coherentes con el código: si cambia una política de limpieza, el umbral de similitud,
+las features, la cantidad sugerida o el criterio de reemplazo, actualizar `DECISIONES.md`.
 
 ## Flujo de trabajo
 

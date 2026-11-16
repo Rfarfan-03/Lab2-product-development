@@ -73,6 +73,15 @@ def test_fallo_registrado_por_el_dag(cliente, engine):
     assert body == {"estado": "fallido", "promovido": False, "version": "7", "motivo": "El reentrenamiento falló"}
 
 
+def test_fallo_reporta_la_ultima_version_vigente_aunque_la_api_no_la_haya_cargado(cliente, engine):
+    # un reentrenamiento promovió la versión 8, pero la API todavía tiene la 7 en memoria
+    id1 = cliente.post("/admin/reentrenar").json()["id"]
+    finalizar(engine, id1, estado="exitoso", promovido=True, version="8", motivo="mejora")
+    id2 = cliente.post("/admin/reentrenar").json()["id"]
+    finalizar(engine, id2, estado="fallido", promovido=False, version=None, motivo="MLflow no responde")
+    assert cliente.get(f"/admin/reentrenar/{id2}").json()["version"] == "8"
+
+
 def test_fallo_detectado_en_airflow(cliente, airflow):
     id_ = cliente.post("/admin/reentrenar").json()["id"]
     airflow.estados[id_] = "failed"
