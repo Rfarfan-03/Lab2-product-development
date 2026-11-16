@@ -1,0 +1,11 @@
+# Los datos y las credenciales no forman parte de las imágenes
+datos_lab2/
+.env
+*.pdf
+.git/
+**/__pycache__/
+**/*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+logs/
