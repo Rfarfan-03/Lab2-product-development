@@ -22,6 +22,9 @@ docker/api/            # Imagen de la API y sus dependencias fijadas
 docker/airflow/        # Imagen de Airflow (incluye los DAGs)
 novamercado/           # Código Python del producto
   api/                 # Aplicación FastAPI (endpoints delgados)
+  esquemas.py          # Modelos Pydantic del contrato (solicitudes limpias y respuestas)
+  catalogo.py          # Carga de tiendas, familias y feriados publicados
+  limpieza/            # Política reparar / advertir / rechazar (sin dependencias de FastAPI)
 dags/                  # DAGs de Airflow
 tests/                 # Pruebas con pytest
 datos_lab2/            # Archivos publicados por el equipo docente (NO versionados)
@@ -54,7 +57,18 @@ cp .env.example .env
 docker compose up -d --build     # levantar todo
 docker compose ps                # estado de los servicios
 docker compose down              # detener (conserva volúmenes)
+
+pip install -r requirements-dev.txt
+python -m pytest                 # pruebas (no requieren datos, MLflow ni Docker)
 ```
+
+## Limpieza de solicitudes
+
+Flujo: cuerpo crudo → `novamercado.limpieza.limpiar_*` → solicitud canónica validada con
+Pydantic + `RegistroCalidad`. `SolicitudRechazada` se traduce a 422 con `detail`.
+Regla general: problemas a nivel de solicitud (cuerpo, tienda, fecha, lista) ⇒ rechazar;
+problemas de un elemento ⇒ descartarlo/suponer con `advertir`; correcciones inequívocas ⇒ `reparar`.
+Toda regla nueva debe ser general (no atada a un ejemplo del catálogo) y llevar prueba.
 
 UIs locales: API http://localhost:8000/docs · MLflow http://localhost:5000 · Airflow http://localhost:8080
 
