@@ -81,5 +81,10 @@ class AdminReentrenamiento:
         return fila
 
     def _version_actual(self) -> str | None:
+        """Versión vigente: la del último reentrenamiento terminado o, si no hay, la cargada."""
+        with self.engine.connect() as con:
+            registrada = repositorio.ultima_version_vigente_registrada(con)
+        if registrada:
+            return registrada
         cargado = self.gestor.actual
         return cargado.version if cargado else None

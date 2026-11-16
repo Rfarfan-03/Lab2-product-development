@@ -212,6 +212,20 @@ def finalizar_reentrenamiento(
         con.execute(insert(reentrenamientos).values(id=id_ejecucion, **valores))
 
 
+def ultima_version_vigente_registrada(con: Connection) -> str | None:
+    """Versión vigente reportada por el último reentrenamiento terminado.
+
+    Solo los reentrenamientos (y el arranque inicial, cuando no hay alias) mueven el alias,
+    así que sirve como respaldo cuando MLflow no responde.
+    """
+    return con.execute(
+        select(reentrenamientos.c.version)
+        .where(reentrenamientos.c.version.isnot(None), reentrenamientos.c.terminado_en.isnot(None))
+        .order_by(reentrenamientos.c.terminado_en.desc())
+        .limit(1)
+    ).scalar()
+
+
 def obtener_reentrenamiento(con: Connection, id_ejecucion: str) -> dict | None:
     fila = con.execute(select(reentrenamientos).where(reentrenamientos.c.id == id_ejecucion)).mappings().first()
     return dict(fila) if fila else None
