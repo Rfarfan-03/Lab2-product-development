@@ -25,6 +25,7 @@ novamercado/           # Código Python del producto
   esquemas.py          # Modelos Pydantic del contrato (solicitudes limpias y respuestas)
   catalogo.py          # Carga de tiendas, familias y feriados publicados
   limpieza/            # Política reparar / advertir / rechazar (sin dependencias de FastAPI)
+  modelo/              # Features, baseline, LightGBM, métricas, criterio, entrenamiento/MLflow
 dags/                  # DAGs de Airflow
 tests/                 # Pruebas con pytest
 datos_lab2/            # Archivos publicados por el equipo docente (NO versionados)
@@ -69,6 +70,16 @@ Pydantic + `RegistroCalidad`. `SolicitudRechazada` se traduce a 422 con `detail`
 Regla general: problemas a nivel de solicitud (cuerpo, tienda, fecha, lista) ⇒ rechazar;
 problemas de un elemento ⇒ descartarlo/suponer con `advertir`; correcciones inequívocas ⇒ `reparar`.
 Toda regla nueva debe ser general (no atada a un ejemplo del catálogo) y llevar prueba.
+
+## Modelado
+
+- `features.construir_features` es la única fuente de features, para entrenar y para predecir;
+  solo usa ventas de fechas anteriores a la fecha objetivo.
+- `cantidad_sugerida` = cuantil c_faltante/(c_faltante+c_sobrante) de cada familia (newsvendor).
+- Registro: modelo `novamercado-ventas`, alias `vigente`. Cada entrenamiento registra al mejor
+  candidato como versión nueva; el alias solo se mueve si `criterio.decidir_reemplazo` lo aprueba
+  (costo estrictamente menor en la misma ventana de validación de 28 días).
+- Las versiones de pandas, numpy, lightgbm y mlflow-skinny deben coincidir entre la API y Airflow.
 
 UIs locales: API http://localhost:8000/docs · MLflow http://localhost:5000 · Airflow http://localhost:8080
 
