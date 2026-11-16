@@ -89,6 +89,17 @@ El código de BD debe funcionar en SQLAlchemy 1.4 (versión de Airflow) y en SQL
   (costo estrictamente menor en la misma ventana de validación de 28 días).
 - Las versiones de pandas, numpy, lightgbm y mlflow-skinny deben coincidir entre la API y Airflow.
 
+## Reentrenamiento
+
+- `POST /admin/reentrenar` crea la fila en `reentrenamientos` y dispara el DAG
+  `reentrenamiento_modelo` por la REST API de Airflow con `dag_run_id` = id devuelto.
+- El DAG (`dags/reentrenamiento.py`) entrena con `repositorio.ventas_para_entrenar` y escribe
+  el resultado en `reentrenamientos`; si falla, `registrar_fallo` lo deja como `fallido`.
+- `GET /admin/reentrenar/{id}` lee la fila y, mientras siga en curso, consulta a Airflow para
+  detectar ejecuciones fallidas sin registro.
+- `MonitorModelo` (hilo de la API) revisa el alias cada `MODELO_REFRESCO_SEG` (30 s) y carga la
+  versión nueva sin reiniciar; si MLflow no responde, conserva el modelo en memoria.
+
 UIs locales: API http://localhost:8000/docs · MLflow http://localhost:5000 · Airflow http://localhost:8080
 
 ## Flujo de trabajo

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     Column,
     Date,
     DateTime,
@@ -70,6 +71,20 @@ predicciones = Table(
     Column("version_modelo", String(50), nullable=False),
 )
 Index("ix_predicciones_tienda_fecha", predicciones.c.tienda_id, predicciones.c.fecha)
+
+# Ejecuciones de reentrenamiento (id = dag_run_id de Airflow)
+reentrenamientos = Table(
+    "reentrenamientos",
+    metadata,
+    Column("id", String(100), primary_key=True),
+    Column("estado", String(20), nullable=False),  # en_curso | exitoso | fallido
+    Column("promovido", Boolean),
+    Column("version", String(50)),  # versión vigente al terminar
+    Column("version_candidata", String(50)),
+    Column("motivo", Text),
+    Column("solicitado_en", DateTime(timezone=True), server_default=func.now(), nullable=False),
+    Column("terminado_en", DateTime(timezone=True)),
+)
 
 # Ventas reales: una fila por tienda, fecha y familia (registro idempotente)
 observaciones = Table(
