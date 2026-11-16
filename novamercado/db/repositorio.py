@@ -17,6 +17,7 @@ from novamercado.db.esquema import (
     metadata,
     observaciones,
     predicciones,
+    reentrenamientos,
     solicitudes,
 )
 from novamercado.esquemas import ObservacionCalidad, SolicitudObservaciones
@@ -155,6 +156,43 @@ def historia_reciente(con: Connection, tienda_id: int, fecha: date, dias: int) -
     df["fecha"] = pd.to_datetime(df["fecha"])
     df["ventas"] = df["ventas"].astype(float)
     return df
+
+
+# --------------------------------------------------------------------------- reentrenamientos
+
+
+def registrar_reentrenamiento(con: Connection, id_ejecucion: str) -> None:
+    con.execute(insert(reentrenamientos).values(id=id_ejecucion, estado="en_curso"))
+
+
+def finalizar_reentrenamiento(
+    con: Connection,
+    id_ejecucion: str,
+    estado: str,
+    promovido: bool,
+    version: str | None,
+    motivo: str,
+    version_candidata: str | None = None,
+) -> None:
+    """Guarda el resultado; crea la fila si la ejecución no se pidió por la API."""
+    valores = dict(
+        estado=estado,
+        promovido=promovido,
+        version=version,
+        version_candidata=version_candidata,
+        motivo=motivo,
+        terminado_en=func.now(),
+    )
+    actualizadas = con.execute(
+        update(reentrenamientos).where(reentrenamientos.c.id == id_ejecucion).values(**valores)
+    ).rowcount
+    if not actualizadas:
+        con.execute(insert(reentrenamientos).values(id=id_ejecucion, **valores))
+
+
+def obtener_reentrenamiento(con: Connection, id_ejecucion: str) -> dict | None:
+    fila = con.execute(select(reentrenamientos).where(reentrenamientos.c.id == id_ejecucion)).mappings().first()
+    return dict(fila) if fila else None
 
 
 # --------------------------------------------------------------------------- datos para reentrenar

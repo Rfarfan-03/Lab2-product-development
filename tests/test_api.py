@@ -13,8 +13,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.pool import StaticPool
 
+from novamercado.api.admin import AdminReentrenamiento
 from novamercado.api.gestor_modelo import GestorModelo, ModeloCargado
-from novamercado.api.main import crear_app
+from novamercado.api.main import Componentes, crear_app
 from novamercado.api.servicio import Servicio
 from novamercado.db import repositorio
 from novamercado.db.esquema import correcciones, historico_ventas, observaciones, predicciones, solicitudes
@@ -68,10 +69,47 @@ def feriados_df():
     return pd.DataFrame({"fecha": pd.to_datetime(["2025-11-01"]), "nombre": ["x"], "tipo": ["feriado"], "ambito": ["nacional"]})
 
 
+class AirflowFalso:
+    """Simula la REST API de Airflow: guarda los disparos y devuelve el estado configurado."""
+
+    def __init__(self):
+        self.disponible_ = True
+        self.disparos: list[str] = []
+        self.estados: dict[str, str] = {}
+
+    def disparar(self, id_ejecucion):
+        from novamercado.api.airflow_cliente import AirflowNoDisponible
+
+        if not self.disponible_:
+            raise AirflowNoDisponible("sin conexión")
+        self.disparos.append(id_ejecucion)
+        self.estados[id_ejecucion] = "queued"
+
+    def estado(self, id_ejecucion):
+        from novamercado.api.airflow_cliente import AirflowNoDisponible
+
+        if not self.disponible_:
+            raise AirflowNoDisponible("sin conexión")
+        return self.estados.get(id_ejecucion)
+
+    def disponible(self):
+        return self.disponible_
+
+
 @pytest.fixture
-def cliente(engine, catalogo, feriados_df, tiendas_df, gestor):
+def airflow():
+    return AirflowFalso()
+
+
+def armar_cliente(engine, catalogo, feriados_df, tiendas_df, gestor, airflow):
     servicio = Servicio(engine, catalogo, feriados_df, tiendas_df, gestor)
-    with TestClient(crear_app(servicio)) as c:
+    admin = AdminReentrenamiento(engine, airflow, gestor)
+    return TestClient(crear_app(Componentes(servicio, admin)))
+
+
+@pytest.fixture
+def cliente(engine, catalogo, feriados_df, tiendas_df, gestor, airflow):
+    with armar_cliente(engine, catalogo, feriados_df, tiendas_df, gestor, airflow) as c:
         yield c
 
 
@@ -153,9 +191,8 @@ def test_misma_fecha_puede_solicitarse_mas_de_una_vez(cliente, engine, prediccio
     assert contar(engine, predicciones) == 24
 
 
-def test_sin_modelo_responde_503(engine, catalogo, feriados_df, tiendas_df, prediccion_valida):
-    servicio = Servicio(engine, catalogo, feriados_df, tiendas_df, GestorModelo())
-    with TestClient(crear_app(servicio)) as c:
+def test_sin_modelo_responde_503(engine, catalogo, feriados_df, tiendas_df, airflow, prediccion_valida):
+    with armar_cliente(engine, catalogo, feriados_df, tiendas_df, GestorModelo(), airflow) as c:
         assert c.post("/v1/prediccion", json=prediccion_valida).status_code == 503
         assert c.get("/modelo").status_code == 503
 
